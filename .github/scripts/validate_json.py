@@ -54,13 +54,15 @@ def validate_hardpoint(path: Path, data: dict, errors: list[str]) -> None:
         if not isinstance(entry, dict):
             errors.append(f"{path}: HardpointData[{i}] is not an object")
             continue
-        loc = entry.get("location")
+        # C# deserializer is case-insensitive; both "location" and "Location" are valid
+        loc = entry.get("location") or entry.get("Location")
         if not isinstance(loc, str) or not loc:
             errors.append(f"{path}: HardpointData[{i}] missing 'location' string")
             continue
-        if loc in seen_locations:
+        loc_key = loc.lower()
+        if loc_key in seen_locations:
             errors.append(f"{path}: duplicate location '{loc}' in HardpointData")
-        seen_locations.add(loc)
+        seen_locations.add(loc_key)
 
 
 def validate_file(path: Path, errors: list[str]) -> None:
