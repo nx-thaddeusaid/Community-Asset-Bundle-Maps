@@ -9,13 +9,15 @@ Checks:
        - ID matches the filename stem
        - HardpointData entries each have a 'location' string
        - No duplicate locations within one def
-  3. mod.json has a Name field (when manifest keys are present)
+  3. hardpointdatadef_* IDs are unique across the whole repo
+  4. mod.json has a Name field (when manifest keys are present)
 
 Exit code 0 = clean, non-zero = failures found.
 """
 
 import json
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 
@@ -64,7 +66,7 @@ def validate_hardpoint(path: Path, data: dict, errors: list[str]) -> None:
         seen_locations.add(loc_key)
 
 
-def validate_file(path: Path, errors: list[str]) -> None:
+def validate_file(path: Path, errors: list[str], id_registry: dict[str, list[str]]) -> None:
     try:
         text = path.read_text(encoding="utf-8-sig")
     except OSError as e:
@@ -88,6 +90,9 @@ def validate_file(path: Path, errors: list[str]) -> None:
 
     if name.startswith("hardpointdatadef_"):
         validate_hardpoint(path, data, errors)
+        id_val = data.get("ID")
+        if isinstance(id_val, str) and id_val:
+            id_registry[id_val].append(str(path))
         return
 
     if name == "mod.json":
@@ -100,12 +105,18 @@ def main() -> int:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(".")
     errors: list[str] = []
     total = 0
+    id_registry: dict[str, list[str]] = defaultdict(list)
 
     for json_file in sorted(root.rglob("*.json")):
         if any(part.startswith(".") for part in json_file.parts):
             continue
         total += 1
-        validate_file(json_file, errors)
+        validate_file(json_file, errors, id_registry)
+
+    for id_val, paths in sorted(id_registry.items()):
+        if len(paths) > 1:
+            filenames = [Path(p).name for p in paths]
+            errors.append(f"Duplicate hardpointdatadef ID '{id_val}' in {len(paths)} files: {filenames}")
 
     if errors:
         print(f"FAILED — {len(errors)} error(s) across {total} files:\n")
